@@ -6,3 +6,5 @@
    - `GOOS=linux go build`
    - `GOOS=mac go build`
 1. Enjoy :P
+
+**Disclaimer: This service s currently untested as I wrote this in half an hour just to show example Go code.**

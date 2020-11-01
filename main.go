@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -34,6 +35,13 @@ type TodoItem struct {
 	IsComplete bool
 }
 
+// Create a custom TodoItem array (slice) with the three functions below type to make it sortable by id. One downside of Go: It has not generics, yet :(.
+type TodoItemCollection []TodoItem
+
+func (t TodoItemCollection) Len() int           { return len(t) }
+func (t TodoItemCollection) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
+func (t TodoItemCollection) Less(i, j int) bool { return t[i].Id < t[j].Id }
+
 // Same as our TodoItem but without the id and isComplete because a new item doesn't have a id and is never directly completed.
 type PostTodoItem struct {
 	Name string
@@ -46,10 +54,10 @@ type PutTodoItem struct {
 }
 
 // Go has no classic constructors you create instances of structs by normal functions.
-func NewTodoHandler(lastId int) TodoHandler {
+func NewTodoHandler(lastID int) TodoHandler {
 	return TodoHandler{
 		items:  map[int]TodoItem{},
-		lastId: lastId,
+		lastID: lastID,
 	}
 }
 
@@ -58,7 +66,7 @@ func NewTodoHandler(lastId int) TodoHandler {
 // Go has no classic classes it has structs with fields and you can add method to these struct as seen below for the GetItems function.
 type TodoHandler struct {
 	items  map[int]TodoItem
-	lastId int
+	lastID int
 	sync.RWMutex
 }
 
@@ -67,7 +75,16 @@ type TodoHandler struct {
 func (th *TodoHandler) GetItems(c *gin.Context) {
 	// Here we are just read locking the map to prevent data races.
 	th.RLock()
-	c.JSON(http.StatusOK, th.items)
+	// Lets convert our map into a array (slice in golang) just the be the same as the .NET Core application API.
+	// We use a preallocated slice with the same capacity as the map to improve performance
+	items := make(TodoItemCollection, len(th.items))
+	i := 0
+	for _, item := range th.items {
+		items[i] = item
+		i++
+	}
+	sort.Sort(items)
+	c.JSON(http.StatusOK, items)
 	th.RUnlock()
 }
 
@@ -104,10 +121,10 @@ func (th *TodoHandler) PostItem(c *gin.Context) {
 	// Write locking cause we are going to write into the TodoHandler
 	th.Lock()
 	// Increment the id counter to fake real database id's.
-	th.lastId++
+	th.lastID++
 	// Assign the
-	th.items[th.lastId] = TodoItem{
-		Id:         th.lastId,
+	th.items[th.lastID] = TodoItem{
+		Id:         th.lastID,
 		Name:       item.Name,
 		IsComplete: false,
 	}
@@ -129,7 +146,7 @@ func (th *TodoHandler) PutItem(c *gin.Context) {
 	}
 
 	th.Lock()
-	// Defer calls the statement behind after the function has returned. We use defer here to make sure we unlock the map again. 
+	// Defer calls the statement behind after the function has returned. We use defer here to make sure we unlock the map again.
 	// We can forget it inside of the early return, so its better to use defer to make sure we unlock it to prevent a deadlock.
 	defer th.Unlock()
 	item, ok := th.items[id]
